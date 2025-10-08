@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DamiTools - Login</title>
+  <style>
+    :root{ --bg:#0e0f11; --card:#121317; --muted:#9aa0ad; --brand:#00b4d8; --text:#fff }
+    body{margin:0;height:100vh;display:grid;grid-template-columns:1fr 1fr;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto;color:var(--text);background:#0e0f11}
+    .left{background-image:url('https://images.unsplash.com/photo-1581091012184-5c1f89c7b6f5?auto=format&fit=crop&w=1200&q=80');background-size:cover;background-position:center}
+    .right{display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{width:100%;max-width:420px;background:var(--card);padding:28px;border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,0.6)}
+    h2{color:var(--brand);text-align:center;margin-top:0}
+    label{display:block;font-size:13px;color:var(--muted);margin-top:10px}
+    input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;background:#1b1d20;color:var(--text)}
+    .row{display:flex;gap:8px}
+    .row .half{flex:1}
+    button{width:100%;padding:12px;border-radius:8px;border:none;background:var(--brand);color:#042;cursor:pointer;font-weight:700}
+    .link{display:block;text-align:center;color:var(--brand);margin-top:10px;cursor:pointer}
+    .muted{color:var(--muted);font-size:13px;text-align:center;margin-top:8px}
+    .small-btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px;border-radius:8px;cursor:pointer}
+    #msg{margin-top:8px;text-align:center;color:#ffd; font-size:13px}
+    @media(max-width:800px){ body{grid-template-columns:1fr} .left{display:none} }
+  </style>
+</head>
+<body>
+  <div class="left" aria-hidden="true"></div>
+  <div class="right">
+    <div class="card" role="main" aria-labelledby="loginTitle">
+      <h2 id="loginTitle">Login to DamiTools</h2>
+
+      <form id="loginForm" autocomplete="on" novalidate>
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required />
+
+        <label for="password">Password</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="password" type="password" placeholder="Password" autocomplete="current-password" required style="flex:1"/>
+          <button type="button" id="togglePwd" aria-label="Toggle password visibility" class="small-btn">Show</button>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button id="loginBtn" type="submit">Login</button>
+          <button id="guestBtn" type="button" class="small-btn">Open Store</button>
+        </div>
+      </form>
+
+      <div id="msg" aria-live="polite"></div>
+
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="signupLink" class="small-btn" type="button">Create Account</button>
+        <button id="resetLink" class="small-btn" type="button">Forgot Password?</button>
+      </div>
+
+      <div class="muted">Or open the <a href="index.html" style="color:var(--brand)">store</a> as guest</div>
+    </div>
+  </div>
+
+  <!-- Modular Firebase (v10) -->
+  <script type="module">
+    // IMPORTANT: your SHA-256 fingerprint (for Android) — kept here for reference:
+    // 6E:59:68:C5:CD:0C:5E:9F:1F:F5:C9:DF:F7:23:4D:8E:6D:47:0A:80:ED:2E:B4:55:35:75:C0:32:14:91:F6:67
+
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+    // KEEP YOUR CONFIG EXACTLY AS PROVIDED
+    const firebaseConfig = {
+      apiKey: "AIzaSyA2lx1hb2qZsYaXrQhsUp7hepYu5nY3fgs",
+      authDomain: "damitools.firebaseapp.com",
+      projectId: "damitools",
+      storageBucket: "damitools.firebasestorage.app",
+      messagingSenderId: "875796385681",
+      appId: "1:875796385681:web:563ffc58665bdc94875430"
+    };
+
+    // init app safely (avoid double init)
+    if (!getApps().length) {
+      initializeApp(firebaseConfig);
+      console.log("Firebase initialized (login page)");
+    }
+
+    const auth = getAuth();
+
+    // UI elements
+    const loginForm = document.getElementById('loginForm');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+    const signupLink = document.getElementById('signupLink');
+    const resetLink = document.getElementById('resetLink');
+    const msg = document.getElementById('msg');
+    const guestBtn = document.getElementById('guestBtn');
+    const togglePwd = document.getElementById('togglePwd');
+
+    function setMsg(text, color = '#ffd') {
+      msg.style.color = color;
+      msg.textContent = text || '';
+    }
+
+    function friendlyError(err){
+      const code = err?.code || '';
+      const map = {
+        'auth/wrong-password': 'Incorrect password.',
+        'auth/user-not-found': 'No account found with that email.',
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/email-already-in-use': 'Email already in use. Try login or reset password.',
+        'auth/weak-password': 'Password should be at least 6 characters.',
+        'auth/network-request-failed': 'Network error — check your connection.',
+      };
+      return map[code] || (err?.message || 'An error occurred');
+    }
+
+    // redirect if already signed in
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log('Already signed in:', user.email);
+        // small delay for UX if user lands on login while signed in
+        setMsg('Signed in. Redirecting...', '#bdf7c9');
+        setTimeout(()=> location.href = 'index.html', 600);
+      } else {
+        // clear message
+        setMsg('');
+      }
+    });
+
+    // toggle password visibility
+    togglePwd.addEventListener('click', () => {
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        togglePwd.innerText = 'Hide';
+      } else {
+        passwordInput.type = 'password';
+        togglePwd.innerText = 'Show';
+      }
+    });
+
+    // open store as guest
+    guestBtn.addEventListener('click', ()=> {
+      location.href = 'index.html';
+    });
+
+    // login submit (Enter works because we use form submit)
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setMsg('');
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!email || !password) {
+        setMsg('Please provide email and password.');
+        return;
+      }
+
+      // disable UI while authenticating
+      loginBtn.disabled = true;
+      loginBtn.innerText = 'Logging in...';
+
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        setMsg('Login successful! Redirecting...', '#bdf7c9');
+        // redirect to store
+        setTimeout(()=> location.href = 'index.html', 400);
+      } catch (err) {
+        setMsg(friendlyError(err), '#ffb3b3');
+        console.error('Sign-in error', err);
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.innerText = 'Login';
+      }
+    });
+
+    // signup flow (kept simple; prompt-based)
+    signupLink.addEventListener('click', async () => {
+      const email = prompt('Enter email for new account:');
+      if (!email) return;
+      const pass = prompt('Enter password (min 6 chars):');
+      if (!pass) return;
+      if (pass.length < 6) { alert('Password must be at least 6 characters'); return; }
+
+      signupLink.disabled = true;
+      signupLink.innerText = 'Creating...';
+      try {
+        await createUserWithEmailAndPassword(auth, email.trim(), pass);
+        alert('Account created. You can now login.');
+      } catch (err) {
+        alert(friendlyError(err));
+        console.error('Signup error', err);
+      } finally {
+        signupLink.disabled = false;
+        signupLink.innerText = 'Create Account';
+      }
+    });
+
+    // password reset
+    resetLink.addEventListener('click', async () => {
+      const email = prompt('Enter your email to receive reset link:');
+      if (!email) return;
+      resetLink.disabled = true;
+      resetLink.innerText = 'Sending...';
+      try {
+        await sendPasswordResetEmail(auth, email.trim());
+        alert('Password reset link sent to your email.');
+      } catch (err) {
+        alert(friendlyError(err));
+        console.error('Reset error', err);
+      } finally {
+        resetLink.disabled = false;
+        resetLink.innerText = 'Forgot Password?';
+      }
+    });
+
+    // optional: signOut helper for debug (not visible in UI)
+    window._signOutDebug = async ()=> { try{ await signOut(auth); alert('Signed out'); }catch(e){console.warn(e);} };
+
+  </script>
+</body>
+</html>
